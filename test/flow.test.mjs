@@ -429,14 +429,30 @@ test('groupColor: single-tool group takes its hue, delegation group violet, mixe
   assert.equal(groupColor(mixed), 'hsl(265,20%,55%)')
 })
 
-test('layoutFlow colors fork/join edges with each member tool hue', () => {
+test('layoutFlow colors siding edges with each member tool hue', () => {
   const group = { group: true, id: 'gs1', members: [toolNode(1, 'read'), toolNode(2, 'bash')] }
   const items = [{ id: 'u', kind: 'user', text: 'go' }, group, { id: 'a', kind: 'assistant', text: 'done' }]
   const open = layoutFlow(items, new Set(['gs1']))
+  // 铁路侧线：1 条 fork（组框→首成员）+ 1 条 chain（成员间）+ 1 条 join（末成员→主链）
   const forks = open.edges.filter((e) => e.kind === 'fork')
-  assert.equal(forks.length, 2)
+  const chains = open.edges.filter((e) => e.kind === 'chain')
+  const joins = open.edges.filter((e) => e.kind === 'join')
+  assert.equal(forks.length, 1)
+  assert.equal(chains.length, 1)
+  assert.equal(joins.length, 1)
   assert.equal(forks[0].hue, toolHue('read'))
-  assert.equal(forks[1].hue, toolHue('bash'))
+  assert.equal(chains[0].hue, toolHue('bash'))
+  assert.equal(joins[0].hue, toolHue('bash'))
+  // 成员在工具泳道纵向串联
+  const m1 = open.pos.get('s1')
+  const m2 = open.pos.get('s2')
+  assert.equal(m1.x + m1.w / 2, CHART.laneToolX)
+  assert.equal(m2.x + m2.w / 2, CHART.laneToolX)
+  assert.ok(m2.y > m1.y)
+  // join 汇回下一个主链节点顶中
+  const a = open.pos.get('a')
+  assert.equal(joins[0].x2, a.x + a.w / 2)
+  assert.equal(joins[0].y2, a.y)
   // 扇形边也带委派紫
   const fan = { group: true, id: 'gs9', members: [toolNode(7, 'subagent'), toolNode(8, 'subagent')] }
   const fanLayout = layoutFlow([{ id: 'u', kind: 'user', text: 'x' }, fan, { id: 'a', kind: 'assistant', text: 'y' }], new Set(['gs9']))
@@ -475,7 +491,7 @@ test('attachChildren pairs catalog entries to delegation calls', () => {
   assert.equal(attachChildren(noCalls), noCalls)
 })
 
-test('layoutFlow fans expanded tool groups out and joins back', () => {
+test('layoutFlow routes expanded tool groups through the tool lane siding', () => {
   const group = { group: true, id: 'gs1', members: [toolNode(1, 'read'), toolNode(2, 'write')] }
   const items = [
     { id: 'u', kind: 'user', text: 'go' },
@@ -486,16 +502,14 @@ test('layoutFlow fans expanded tool groups out and joins back', () => {
   assert.equal(collapsed.pos.has('s1'), false) // 折叠时成员不布局
   const open = layoutFlow(items, new Set(['gs1']))
   assert.equal(open.pos.get('s1').shape, 'member')
-  assert.equal(open.pos.get('s1').x, CHART.branchX)
+  // 成员居中于工具泳道
+  assert.equal(open.pos.get('s1').x + open.pos.get('s1').w / 2, CHART.laneToolX)
   assert.ok(open.pos.get('s2').y > open.pos.get('s1').y)
-  const forks = open.edges.filter((e) => e.kind === 'fork')
-  const joins = open.edges.filter((e) => e.kind === 'join')
-  assert.equal(forks.length, 2)
-  assert.equal(joins.length, 2)
-  // join 回到下一个脊柱节点（assistant 方框右缘）
-  const a = open.pos.get('a')
-  assert.equal(joins[0].x2, a.x + a.w)
-  assert.equal(joins[0].y2, a.y + a.h / 2)
+  // 侧线：fork×1 + chain×1 + join×1；主链只保留 u→组（组→a 由侧线表达）
+  assert.equal(open.edges.filter((e) => e.kind === 'fork').length, 1)
+  assert.equal(open.edges.filter((e) => e.kind === 'chain').length, 1)
+  assert.equal(open.edges.filter((e) => e.kind === 'join').length, 1)
+  assert.equal(open.edges.filter((e) => e.kind === 'spine').length, 1)
   // 展开的组撑高了画布
   assert.ok(open.height > collapsed.height)
 })

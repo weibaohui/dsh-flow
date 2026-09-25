@@ -375,23 +375,26 @@ window.__ModuleLoader__.load({
     }
 
     // ── 流程图布局 ───────────────────────────────────────────────────────────
-    // 三条垂直泳道：上下文（左，注入类消息）/ 助手与工具（中，主链）/ 用户（右）。
-    // 回合椭圆与审批菱形居中泳道；展开的工具组向右扇出 fork-join 分支；并行的
-    // 子代理委派（subagent/agent/lead 工具的连续并行调用）在主链下方横向一字
-    // 排开，发散再收敛；重试/失败尝试/压缩等旁路事件挂最右侧虚线分支。
+    // 四条垂直泳道按「转移频率」排布，让流向单调、交叉最少：
+    //   上下文 | 用户 | 助手（主链）| 工具
+    // 回合开始时从左向右单调推进（注入 → 提问 → 助手），随后助手↔工具在右侧相邻
+    // 两列来回——相邻泳道短弧线，不再左右横穿。
+    // 展开的工具组是「铁路侧线」：成员在工具泳道纵向串联，组框一条边引入、末成员
+    // 一条边汇回主链；子代理委派组保持横向发散-收敛扇形；重试/压缩等旁路挂在
+    // 工具泳道右侧。
     const CHART = {
-      laneCtxX: 125, spineX: 355, laneUserX: 585,
-      boxW: 210, boxH: 34,
-      ovalW: 170, ovalEndW: 236, ovalH: 32, diamondW: 160, diamondH: 44,
+      laneCtxX: 100, laneUserX: 280, spineX: 460, laneToolX: 640,
+      boxW: 170, boxH: 34,
+      ovalW: 160, ovalEndW: 220, ovalH: 32, diamondW: 150, diamondH: 44,
       rowGap: 12, turnGap: 18,
-      branchX: 760, memberW: 220, memberH: 30, memberGap: 6,
-      sideX: 780, sideW: 210, sideH: 30, sideGap: 6,
-      fanMemberW: 180, fanGapX: 14, fanDrop: 54,
+      memberW: 170, memberH: 30, memberGap: 8,
+      sideX: 780, sideW: 170, sideH: 30, sideGap: 6,
+      fanMemberW: 165, fanGapX: 12, fanDrop: 54,
       padTop: 34, padBottom: 24,
     }
     const SIDE_KINDS = new Set(['retry', 'attempt', 'compaction', 'command', 'subagent', 'workflow', 'goal'])
 
-    /** 泳道中心线：上下文靠左、用户靠右、其余（助手/工具/待办/回合/审批）居中。 */
+    /** 泳道中心线：上下文靠左、用户次左、助手居中、工具靠右。 */
     function laneXFor(kind) {
       if (kind === 'context') return CHART.laneCtxX
       if (kind === 'user') return CHART.laneUserX
@@ -468,15 +471,16 @@ window.__ModuleLoader__.load({
 
     /**
      * 布局：items（groupNodes 之后）→ { pos: Map(id → {x,y,w,h,shape,item}),
-     * edges: [{x1,y1,x2,y2,kind}], width, height, fanGroups }。纯函数。
-     * kind 取值：spine（主链）/ fork / join（右列工具分支）/ fanfork / fanjoin
-     * （子代理扇形）/ retry / attempt / compaction / command / …（虚线旁路）。
+     * edges: [{x1,y1,x2,y2,kind,hue?}], width, height, fanGroups }。纯函数。
+     * kind 取值：spine（主链）/ fork / chain / join（工具侧线）/ fanfork /
+     * fanjoin（子代理扇形）/ retry / attempt / compaction / …（虚线旁路）。
      */
     function layoutFlow(items, openGroups) {
       const pos = new Map()
       const spine = []
       const sides = []
-      const fans = []        // 展开的并行子代理组（供边生成）
+      const fans = []        // 展开的子代理组（供边生成）
+      const sidings = []     // 展开的普通工具组（铁路侧线）
       const anchorSlots = new Map()
       let y = CHART.padTop
       let lastSpineId = null
@@ -496,7 +500,7 @@ window.__ModuleLoader__.load({
         const shape = kind === 'turn' ? 'oval' : kind === 'approval' ? 'diamond' : 'box'
         const w = shape === 'oval' ? (item.phase === 'end' ? CHART.ovalEndW : CHART.ovalW) : shape === 'diamond' ? CHART.diamondW : CHART.boxW
         const hgt = shape === 'oval' ? CHART.ovalH : shape === 'diamond' ? CHART.diamondH : CHART.boxH
-        // 回合与决策始终居中泳道；用户/上下文各走自己的泳道
+        // 回合与决策在主泳道；用户/上下文各走自己的泳道
         const laneX = shape === 'box' ? laneXFor(kind) : CHART.spineX
         pos.set(item.id, { x: laneX - w / 2, y, w, h: hgt, shape, item })
         spine.push(item.id)
@@ -515,11 +519,13 @@ window.__ModuleLoader__.load({
             fans.push(item.id)
             y = fanY + CHART.memberH + 10
           } else {
-            // 普通工具组：右列 fork-join
+            // 铁路侧线：成员在工具泳道纵向串联，位于组框与下一个主链节点之间
+            const mx = CHART.laneToolX - CHART.memberW / 2
             ms.forEach((m, i) => {
-              pos.set(m.id, { x: CHART.branchX, y: y + 6 + i * (CHART.memberH + CHART.memberGap), w: CHART.memberW, h: CHART.memberH, shape: 'member', item: m })
+              pos.set(m.id, { x: mx, y: y + 6 + i * (CHART.memberH + CHART.memberGap), w: CHART.memberW, h: CHART.memberH, shape: 'member', item: m })
             })
-            y += 6 + ms.length * CHART.memberH + Math.max(0, ms.length - 1) * CHART.memberGap + 6
+            sidings.push(item.id)
+            y += 6 + ms.length * CHART.memberH + Math.max(0, ms.length - 1) * CHART.memberGap + 10
           }
         }
         y += kind === 'turn' ? CHART.turnGap : CHART.rowGap
@@ -535,11 +541,12 @@ window.__ModuleLoader__.load({
       }
 
       const fanSet = new Set(fans)
+      const sidingSet = new Set(sidings)
       const edges = []
-      // 主链：相邻脊柱节点串联；展开的子代理扇形占据的区间不画直线（由扇形边表达流向）
+      // 主链：相邻脊柱节点串联；展开的组（扇形/侧线）区间不画直线——流向由分支表达
       for (let i = 1; i < spine.length; i++) {
         const prevItem = pos.get(spine[i - 1]).item
-        if (fanSet.has(prevItem.id)) continue
+        if (fanSet.has(prevItem.id) || sidingSet.has(prevItem.id)) continue
         const a = pos.get(spine[i - 1])
         const b = pos.get(spine[i])
         edges.push({
@@ -568,18 +575,32 @@ window.__ModuleLoader__.load({
           }
           continue
         }
-        // 普通工具组：fork 出右列、join 回主链（边随成员工具的颜色）
-        const gy = g.y + g.h / 2
-        const jx = next ? next.x + next.w : g.x + g.w / 2
-        const jy = next ? next.y + next.h / 2 : g.y + g.h + 12
-        for (const m of item.members) {
-          const p = pos.get(m.id)
-          const my = p.y + p.h / 2
-          edges.push({ x1: g.x + g.w, y1: gy, x2: p.x, y2: my, kind: 'fork', hue: toolHue(m.name) })
-          edges.push({ x1: p.x + p.w, y1: my, x2: jx, y2: jy, kind: 'join', hue: toolHue(m.name) })
+        // 铁路侧线：组框右缘 → 首成员顶中；成员间在工具泳道内垂直串联；
+        // 末成员底中 → 下一脊柱节点顶中。边色随各成员工具。
+        const first = pos.get(item.members[0].id)
+        const last = pos.get(item.members[item.members.length - 1].id)
+        edges.push({
+          x1: g.x + g.w, y1: g.y + g.h / 2,
+          x2: CHART.laneToolX, y2: first.y,
+          kind: 'fork', hue: toolHue(item.members[0].name),
+        })
+        for (let i = 1; i < item.members.length; i++) {
+          const prev = pos.get(item.members[i - 1].id)
+          const cur = pos.get(item.members[i].id)
+          edges.push({
+            x1: CHART.laneToolX, y1: prev.y + prev.h,
+            x2: CHART.laneToolX, y2: cur.y,
+            kind: 'chain', hue: toolHue(item.members[i].name),
+          })
         }
+        edges.push({
+          x1: CHART.laneToolX, y1: last.y + last.h,
+          x2: next ? next.x + next.w / 2 : g.x + g.w / 2,
+          y2: next ? next.y : last.y + last.h + 28,
+          kind: 'join', hue: toolHue(item.members[item.members.length - 1].name),
+        })
       }
-      // 旁路：锚点右边 → 旁路框左边（虚线）
+      // 旁路：锚点右边 → 旁路框左边（虚线，工具泳道右侧）
       for (const { item, anchorId } of sides) {
         const a = pos.get(anchorId)
         const p = pos.get(item.id)
@@ -732,7 +753,7 @@ window.__ModuleLoader__.load({
     .fw-chart-edges{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
     .fw-edge{fill:none;stroke:var(--dsw-alias-border-l3,rgba(128,128,128,.6));stroke-width:1.5}
     .fw-edge.spine{stroke:var(--dsw-alias-border-l3,rgba(128,128,128,.7))}
-    .fw-edge.fork,.fw-edge.join,.fw-edge.fanfork,.fw-edge.fanjoin{stroke-width:1.8}
+    .fw-edge.fork,.fw-edge.join,.fw-edge.fanfork,.fw-edge.fanjoin,.fw-edge.chain{stroke-width:1.8}
     .fw-edge.retry{stroke:hsl(20,85%,50%);stroke-dasharray:5 4}
     .fw-edge.attempt{stroke:var(--dsw-alias-state-error-primary);stroke-dasharray:5 4}
     .fw-edge.subagent{stroke:hsl(265,60%,52%);stroke-dasharray:5 4}
@@ -973,8 +994,9 @@ window.__ModuleLoader__.load({
         : null
       const lanes = [
         { x: CHART.laneCtxX, label: t('kindContext') },
-        { x: CHART.spineX, label: t('kindAssistant') + ' · ' + t('kindTool') },
         { x: CHART.laneUserX, label: t('kindUser') },
+        { x: CHART.spineX, label: t('kindAssistant') },
+        { x: CHART.laneToolX, label: t('kindTool') },
       ]
       return h('div', { className: 'fw-chart-wrap' },
         // 泳道列头：sticky，滚动长图时始终可见（与画布同宽同坐标系）
