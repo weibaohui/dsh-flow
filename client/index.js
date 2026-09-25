@@ -640,9 +640,14 @@ function layoutFlow(items, openGroups) {
   return { pos, edges, width: Math.max(CHART.sideX + CHART.sideW + 40, maxFanRight + 16), height: y + CHART.padBottom, fanGroups: fans }
 }
 
-/** 边的 SVG 路径：垂直关系（主链/扇形）纵向弯曲，横向关系（右列/旁路）横向弯曲。 */
-function edgePath(e) {
-  if (e.x1 === e.x2) return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
+/**
+ * 边的 SVG 路径。EDGE_STYLE 一键切换：
+ *   'line'   —— 直线直连（折线感、机械感）
+ *   'bezier' —— 贝塞尔曲线（垂直关系纵向弯、横向关系横向弯，更平缓）
+ */
+const EDGE_STYLE = 'bezier'
+function edgePath(e, style = EDGE_STYLE) {
+  if (style === 'line' || e.x1 === e.x2) return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
   if (e.kind === 'spine' || e.kind === 'fanfork' || e.kind === 'fanjoin') {
     const d = Math.max(24, Math.min(90, Math.abs(e.y2 - e.y1) / 2))
     return `M ${e.x1} ${e.y1} C ${e.x1} ${e.y1 + d}, ${e.x2} ${e.y2 - d}, ${e.x2} ${e.y2}`

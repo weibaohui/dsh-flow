@@ -331,11 +331,12 @@ test('layoutFlow lays spine nodes top-down with shapes, lanes and chain edges', 
   // y 严格递增
   const ys = ['a', 'b', 'x', 'c', 'd', 'e'].map((id) => pos.get(id).y)
   for (let i = 1; i < ys.length; i++) assert.ok(ys[i] > ys[i - 1])
-  // 主链 5 条边；跨泳道的边是纵向贝塞尔（含 C），同泳道是直线
+  // 主链 5 条边；跨泳道：贝塞尔模式是 C 曲线，直线模式是直连
   const spineEdges = edges.filter((e) => e.kind === 'spine')
   assert.equal(spineEdges.length, 5)
   const cross = spineEdges.find((e) => e.x1 !== e.x2)
-  assert.match(edgePath(cross), /^M .+ C /)
+  assert.match(edgePath(cross, 'bezier'), /^M .+ C /)
+  assert.match(edgePath(cross, 'line'), /^M .+ L /)
   const straight = spineEdges.find((e) => e.x1 === e.x2)
   assert.match(edgePath(straight), /^M .+ L /)
 })
