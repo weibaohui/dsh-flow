@@ -1,0 +1,11 @@
+# dsh-plugin-dsh-flow bundle patch: contributes the plugin row into the host
+# composition when this package is installed via `dsh plugin add`.
+#
+# The plugin is HOST-PLANE: it reads host session logs (ctx.sessions +
+# session/event subscription) and serves its HTTP/SSE API over a webServer
+# route; its client half registers a conversation.view tab. It must therefore
+# land in the host composition (this insert), never inside an agent preset.
+
+- insert:
+    - id: dsh-flow
+      name: '@weibaohui/dsh-flow'
