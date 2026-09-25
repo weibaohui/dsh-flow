@@ -642,18 +642,27 @@ function layoutFlow(items, openGroups) {
 
 /**
  * 边的 SVG 路径。EDGE_STYLE 一键切换：
- *   'line'   —— 直线直连（折线感、机械感）
- *   'bezier' —— 贝塞尔曲线（垂直关系纵向弯、横向关系横向弯，更平缓）
+ *   'quad'   —— 单弯普通曲线（Q 二次曲线，圆角拐弯：主链先竖后横，侧线先横后竖）
+ *   'line'   —— 直线直连
+ *   'bezier' —— 三次贝塞尔（双弯 S 曲线）
  */
-const EDGE_STYLE = 'bezier'
+const EDGE_STYLE = 'quad'
 function edgePath(e, style = EDGE_STYLE) {
-  if (style === 'line' || e.x1 === e.x2) return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
-  if (e.kind === 'spine' || e.kind === 'fanfork' || e.kind === 'fanjoin') {
-    const d = Math.max(24, Math.min(90, Math.abs(e.y2 - e.y1) / 2))
-    return `M ${e.x1} ${e.y1} C ${e.x1} ${e.y1 + d}, ${e.x2} ${e.y2 - d}, ${e.x2} ${e.y2}`
+  if (e.x1 === e.x2) return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
+  if (style === 'line') return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
+  if (style === 'bezier') {
+    if (e.kind === 'spine' || e.kind === 'fanfork' || e.kind === 'fanjoin') {
+      const d = Math.max(24, Math.min(90, Math.abs(e.y2 - e.y1) / 2))
+      return `M ${e.x1} ${e.y1} C ${e.x1} ${e.y1 + d}, ${e.x2} ${e.y2 - d}, ${e.x2} ${e.y2}`
+    }
+    const mx = Math.max(40, Math.abs(e.x2 - e.x1) / 2)
+    return `M ${e.x1} ${e.y1} C ${e.x1 + mx} ${e.y1}, ${e.x2 - mx} ${e.y2}, ${e.x2} ${e.y2}`
   }
-  const mx = Math.max(40, Math.abs(e.x2 - e.x1) / 2)
-  return `M ${e.x1} ${e.y1} C ${e.x1 + mx} ${e.y1}, ${e.x2 - mx} ${e.y2}, ${e.x2} ${e.y2}`
+  // quad：单弯普通曲线。主链/扇形先竖直下行再圆弧拐向目标；侧线先横出再拐下。
+  const verticalFirst = e.kind === 'spine' || e.kind === 'fanfork' || e.kind === 'fanjoin'
+  const cx = verticalFirst ? e.x1 : e.x2
+  const cy = verticalFirst ? e.y2 : e.y1
+  return `M ${e.x1} ${e.y1} Q ${cx} ${cy} ${e.x2} ${e.y2}`
 }
 
 const formatNum = (n) => Number.isFinite(n) ? n.toLocaleString('en-US') : '-'
