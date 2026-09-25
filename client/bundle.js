@@ -1059,8 +1059,9 @@ window.__ModuleLoader__.load({
         h('div', { className: 'fw-chart', style: { width, height: totalH, minWidth: '100%' } },
           h('svg', { className: 'fw-chart-edges', width, height: totalH },
             h('defs', null,
-              // context-stroke：箭头头自动跟随各边的 stroke（工具按名取色、委派紫色）
-              h('marker', { id: 'fw-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6.5, markerHeight: 6.5, orient: 'auto-start-reverse' },
+              // context-stroke：箭头头自动跟随各边的 stroke；refX=7 让线端点落在
+              // 三角形正中心（箭头后半盖住线头，前尖微探进节点边框），随曲线切线倾斜
+              h('marker', { id: 'fw-arrow', viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' },
                 h('path', { d: 'M0,0 L10,5 L0,10 z', fill: 'context-stroke' }))),
             // 泳道引导线
             lanes.map((lane) => h('line', { key: 'lane' + lane.x, x1: lane.x, y1: CHART.padTop - 12, x2: lane.x, y2: height, className: 'fw-lane' })),
