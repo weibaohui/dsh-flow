@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const host = require('../src/index.js')
 const client = require('../client/index.js')
 const { mapEvent, blocksText, truncate, summarizeToolArguments, sessionBusy, projectFlow, decodeSessionLog, diskEventsOf } = host.__internals
-const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, CHART } = client.__internals
+const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, CHART } = client.__internals
 const tzh = (key, vars) => {
   let out = client.__internals.ZH[key] ?? key
   if (vars) for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(String(v))
@@ -393,6 +393,31 @@ test('paired catalog nodes are not drawn as side branches; unpaired stay', () =>
   assert.equal(pos.has('s20'), false) // 已配对 → 不挂旁路
   assert.equal(pos.has('s22'), true)  // 未配对 → 保留旁路（可双击下钻）
   assert.equal(pos.get('s22').shape, 'side')
+})
+
+test('estTextWidth: CJK 全宽、ASCII 半宽', () => {
+  assert.equal(estTextWidth('中文'), 25)
+  assert.ok(estTextWidth('ab') < estTextWidth('中文'))
+  assert.equal(estTextWidth(''), 0)
+})
+
+test('nodeWidth/memberWidth adapt to content and clamp to lane-safe bounds', () => {
+  // 短内容取最小宽，长内容封顶，泳道内不溢出
+  assert.equal(nodeWidth({ kind: 'user', text: '好' }), 140)
+  assert.equal(nodeWidth({ kind: 'user', text: '很长'.repeat(200) }), 210)
+  // 助手带思考+用量徽标时更宽
+  const plain = nodeWidth({ kind: 'assistant', text: '好的' })
+  const withBadges = nodeWidth({ kind: 'assistant', text: '好的', reasoningChars: 800, usage: { input: 1000, output: 200 } })
+  assert.ok(withBadges > plain)
+  // 组框计入「N 个工具调用」chip
+  const groupW = nodeWidth({ group: true, members: [toolNode(1, 'bash'), toolNode(2, 'bash')] })
+  assert.ok(groupW >= 140 && groupW <= 210)
+  // 成员框：长 prompt 截到 250，带耗时/子代理徽标加宽
+  const short = memberWidth({ name: 'read', summary: 'a.ts' })
+  const long = memberWidth({ name: 'spawn_teammate', summary: 'prompt: ' + 'x'.repeat(300), durationMs: 2000, childId: 'c1' })
+  assert.ok(long > short)
+  assert.equal(long, 250)
+  assert.equal(memberWidth({ name: 'x' }), 150)
 })
 
 test('isDelegationTool matches dsh subagent tool names', () => {

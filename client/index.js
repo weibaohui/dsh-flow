@@ -374,12 +374,12 @@ function toolGroupLine(members) {
 // 工具泳道右侧。
 const CHART = {
   laneCtxX: 100, laneUserX: 280, spineX: 460, laneToolX: 640,
-  boxW: 170, boxH: 34,
+  boxH: 34,
   ovalW: 160, ovalEndW: 220, ovalH: 32, diamondW: 150, diamondH: 44,
-  rowGap: 12, turnGap: 18,
-  memberW: 170, memberH: 30, memberGap: 8,
+  rowGap: 22, turnGap: 28,
+  memberH: 30, memberGap: 10,
   sideX: 780, sideW: 170, sideH: 30, sideGap: 6,
-  fanMemberW: 165, fanGapX: 12, fanDrop: 54,
+  fanGapX: 12, fanDrop: 64,
   padTop: 34, padBottom: 24,
 }
 const SIDE_KINDS = new Set(['retry', 'attempt', 'compaction', 'command', 'subagent', 'workflow', 'goal'])
@@ -389,6 +389,44 @@ function laneXFor(kind) {
   if (kind === 'context') return CHART.laneCtxX
   if (kind === 'user') return CHART.laneUserX
   return CHART.spineX
+}
+
+// ── 节点宽度自适应 ───────────────────────────────────────────────────────
+// 按内容估算像素宽（CJK 全宽 ≈ fontSize，ASCII ≈ 0.56×fontSize），夹紧在
+// 泳道安全区内：行高 56 > 框高 34，相邻泳道节点纵向天然错开，宽些也不相撞。
+const CJK_RE = /[\u2e80-\u9fff\uff00-\uffef\uf900-\ufaff]/
+function estTextWidth(text, fontSize = 12.5) {
+  let w = 0
+  for (const ch of String(text || '')) w += CJK_RE.test(ch) ? fontSize : fontSize * 0.56
+  return w
+}
+// 布局是纯函数、不依赖 locale 注入——宽度估算用内置中文表即可（只差几个像素）
+const tWidth = (key, vars) => {
+  let out = ZH[key] ?? key
+  if (vars) for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(String(v))
+  return out
+}
+
+/** 主链方框宽度：内容（行文本 + chip + 徽标）+ 固定装饰，140–210 夹紧。 */
+function nodeWidth(item) {
+  const isGroup = item.group === true
+  const line = isGroup ? toolGroupLine(item.members) : nodeLine(item, tWidth)
+  let w = estTextWidth(line, 12.5) + 48 // 圆点 + chip 底 + padding
+  if (isGroup) w += 78 // 「N 个工具调用」chip + caret
+  else if (item.kind === 'assistant') w += (item.reasoningChars ? 92 : 0) + (item.usage ? 96 : 0) + (item.interrupted ? 58 : 0)
+  else if (item.kind === 'todo') w += 26
+  else if (item.kind === 'user' || item.kind === 'context') w += 14
+  return Math.round(Math.min(Math.max(140, w), 210))
+}
+
+/** 成员框宽度：子代理标签或「名字 · 摘要」+ 圆点 + 耗时徽标，150–250 夹紧。 */
+function memberWidth(m) {
+  const line = m.childLabel || (m.name + (m.summary ? ' · ' + m.summary : ''))
+  let w = estTextWidth(line, 11.5) + 54 // 圆点 + padding
+  if (m.durationMs !== undefined) w += 52
+  if (m.childId) w += 24
+  if (m.status === 'error') w += 30
+  return Math.round(Math.min(Math.max(150, w), 250))
 }
 
 /** 委派工具名：subagent（dsh-tool-subagent 默认名）/ lead（agent-team）/
@@ -488,7 +526,7 @@ function layoutFlow(items, openGroups) {
       continue
     }
     const shape = kind === 'turn' ? 'oval' : kind === 'approval' ? 'diamond' : 'box'
-    const w = shape === 'oval' ? (item.phase === 'end' ? CHART.ovalEndW : CHART.ovalW) : shape === 'diamond' ? CHART.diamondW : CHART.boxW
+    const w = shape === 'oval' ? (item.phase === 'end' ? CHART.ovalEndW : CHART.ovalW) : shape === 'diamond' ? CHART.diamondW : nodeWidth(item)
     const hgt = shape === 'oval' ? CHART.ovalH : shape === 'diamond' ? CHART.diamondH : CHART.boxH
     // 回合与决策在主泳道；用户/上下文各走自己的泳道
     const laneX = shape === 'box' ? laneXFor(kind) : CHART.spineX
@@ -498,24 +536,26 @@ function layoutFlow(items, openGroups) {
     if (isGroup && openGroups.has(item.id)) {
       const ms = item.members
       if (isDelegationGroup(item)) {
-        // 子代理扇形：成员在主链下方横向一排，向下发散
-        const rowW = ms.length * CHART.fanMemberW + (ms.length - 1) * CHART.fanGapX
-        const startX = Math.max(12, CHART.spineX - rowW / 2)
+        // 子代理扇形：成员在主链下方横向一排（各自自适应宽），向下发散
+        const widths = ms.map(memberWidth)
+        const rowW = widths.reduce((a, b) => a + b, 0) + (ms.length - 1) * CHART.fanGapX
+        let fx = Math.max(12, CHART.spineX - rowW / 2)
         const fanY = y + CHART.fanDrop
         ms.forEach((m, i) => {
-          pos.set(m.id, { x: startX + i * (CHART.fanMemberW + CHART.fanGapX), y: fanY, w: CHART.fanMemberW, h: CHART.memberH, shape: 'member', item: m })
+          pos.set(m.id, { x: fx, y: fanY, w: widths[i], h: CHART.memberH, shape: 'member', item: m })
+          fx += widths[i] + CHART.fanGapX
         })
-        maxFanRight = Math.max(maxFanRight, startX + rowW)
+        maxFanRight = Math.max(maxFanRight, Math.max(12, CHART.spineX - rowW / 2) + rowW)
         fans.push(item.id)
-        y = fanY + CHART.memberH + 10
+        y = fanY + CHART.memberH + 12
       } else {
-        // 铁路侧线：成员在工具泳道纵向串联，位于组框与下一个主链节点之间
-        const mx = CHART.laneToolX - CHART.memberW / 2
+        // 铁路侧线：成员在工具泳道纵向串联（各自自适应宽、泳道居中）
         ms.forEach((m, i) => {
-          pos.set(m.id, { x: mx, y: y + 6 + i * (CHART.memberH + CHART.memberGap), w: CHART.memberW, h: CHART.memberH, shape: 'member', item: m })
+          const mw = memberWidth(m)
+          pos.set(m.id, { x: CHART.laneToolX - mw / 2, y: y + 6 + i * (CHART.memberH + CHART.memberGap), w: mw, h: CHART.memberH, shape: 'member', item: m })
         })
         sidings.push(item.id)
-        y += 6 + ms.length * CHART.memberH + Math.max(0, ms.length - 1) * CHART.memberGap + 10
+        y += 6 + ms.length * CHART.memberH + Math.max(0, ms.length - 1) * CHART.memberGap + 12
       }
     }
     y += kind === 'turn' ? CHART.turnGap : CHART.rowGap
@@ -1284,7 +1324,7 @@ const CLIENT_NAME = '@weibaohui/dsh-flow'
 module.exports = {
   name: CLIENT_NAME,
   inject: ['slots', 'locale'],
-  __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, laneXFor, CHART, formatDuration, formatClock },
+  __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, laneXFor, CHART, formatDuration, formatClock },
   __boot(container, opts = {}) {
     ensureStyles()
     const t = opts.t || ((key, vars) => {
