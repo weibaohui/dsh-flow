@@ -1,6 +1,6 @@
 {
   "name": "@weibaohui/dsh-flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "dsh 插件 · 执行流程图：把当前会话的执行过程画成一条纵向节点流（回合/用户/助手/工具/审批/重试/压缩），SSE 实时追加——会话执行到哪，图就画到哪，自动跟随滚动。",
   "license": "MIT",
   "keywords": [
