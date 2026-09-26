@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const host = require('../src/index.js')
 const client = require('../client/index.js')
 const { mapEvent, blocksText, truncate, summarizeToolArguments, sessionBusy, projectFlow, decodeSessionLog, diskEventsOf } = host.__internals
-const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgeGeometry, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, arrowFor, edgeColor, CHART } = client.__internals
+const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgeGeometry, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, formatCompact, usageCompact, arrowFor, edgeColor, CHART } = client.__internals
 const tzh = (key, vars) => {
   let out = client.__internals.ZH[key] ?? key
   if (vars) for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(String(v))
@@ -403,6 +403,20 @@ test('estTextWidth: CJK 全宽、ASCII 半宽', () => {
   assert.equal(estTextWidth('中文'), 25)
   assert.ok(estTextWidth('ab') < estTextWidth('中文'))
   assert.equal(estTextWidth(''), 0)
+})
+
+test('formatCompact: 万内原样，往后近似万/亿', () => {
+  assert.equal(formatCompact(233), '233')
+  assert.equal(formatCompact(9999), '9,999')
+  assert.equal(formatCompact(25563), '2.6万')
+  assert.equal(formatCompact(30950), '3.1万')
+  assert.equal(formatCompact(123456), '12.3万')
+  assert.equal(formatCompact(1234567), '123万')
+  assert.equal(formatCompact(255630000), '2.6亿')
+  assert.equal(formatCompact(3550000000), '35.5亿')
+  assert.equal(formatCompact(-5000), '-5,000')
+  assert.equal(formatCompact(undefined), '-')
+  assert.equal(usageCompact({ input: 25563, output: 233 }), '↑2.6万 ↓233')
 })
 
 test('arrowFor: base edge perpendicular to arrowDir, apex on the endpoint', () => {

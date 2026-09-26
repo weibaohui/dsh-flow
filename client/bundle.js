@@ -441,8 +441,8 @@ window.__ModuleLoader__.load({
           : item.kind === 'todo' ? tWidth('kindTodo') : ''
         if (chipText) fixed += estTextWidth(chipText, 10.5) + 20
         if (item.kind === 'assistant') {
-          if (item.reasoningChars) fixed += estTextWidth(tWidth('thinkingBadge', { n: formatNum(item.reasoningChars) }), 11) + 22
-          if (item.usage) fixed += estTextWidth('↑' + formatNum(item.usage.input) + ' ↓' + formatNum(item.usage.output), 11) + 22
+          if (item.reasoningChars) fixed += estTextWidth(tWidth('thinkingBadge', { n: formatCompact(item.reasoningChars) }), 11) + 22
+          if (item.usage) fixed += estTextWidth(usageCompact(item.usage), 11) + 22
           if (item.interrupted) fixed += 76
         }
         if (item.kind === 'todo') fixed += 30
@@ -775,6 +775,20 @@ window.__ModuleLoader__.load({
 
     const formatNum = (n) => Number.isFinite(n) ? n.toLocaleString('en-US') : '-'
 
+    /** 大数近似换算：万以内原样（带千分位），往后 X.X万/X万、X.X亿/X亿、X万亿。 */
+    function formatCompact(n) {
+      if (!Number.isFinite(n)) return '-'
+      if (n < 0) return '-' + formatCompact(-n)
+      if (n < 10000) return formatNum(n)
+      const trim = (v) => (v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10))
+      if (n < 1e8) return trim(n / 1e4) + '万'
+      if (n < 1e12) return trim(n / 1e8) + '亿'
+      return trim(n / 1e12) + '万亿'
+    }
+
+    /** 徽标用量文本：↑入 ↓出，大数近似。 */
+    const usageCompact = (usage) => '↑' + formatCompact(usage.input) + ' ↓' + formatCompact(usage.output)
+
     function formatDuration(ms) {
       if (!Number.isFinite(ms)) return ''
       if (ms < 1000) return Math.round(ms) + ' ms'
@@ -983,7 +997,7 @@ window.__ModuleLoader__.load({
         if (node.status === 'error') out.push(h('span', { key: 'e', className: 'fw-badge err' }, node.errorReason || node.errorName || 'error'))
       }
       if (node.kind === 'assistant') {
-        if (node.reasoningChars) out.push(h('span', { key: 'th', className: 'fw-badge' }, t('thinkingBadge', { n: formatNum(node.reasoningChars) })))
+        if (node.reasoningChars) out.push(h('span', { key: 'th', className: 'fw-badge' }, t('thinkingBadge', { n: formatCompact(node.reasoningChars) })))
         if (node.interrupted) out.push(h('span', { key: 'i', className: 'fw-badge err' }, t('interruptedBadge')))
         if (node.usage) out.push(h('span', { key: 'u', className: 'fw-badge' }, '↑' + formatNum(node.usage.input) + ' ↓' + formatNum(node.usage.output)))
       }
@@ -1104,8 +1118,8 @@ window.__ModuleLoader__.load({
         if (running > 0) badges.push(h('span', { key: 'r', className: 'fw-badge busy' }, t('runningBadge') + ' ' + running))
         if (running === 0 && totalMs > 0) badges.push(h('span', { key: 'd', className: 'fw-badge ok' }, formatDuration(totalMs)))
       } else if (kind === 'assistant') {
-        if (item.reasoningChars) badges.push(h('span', { key: 'th', className: 'fw-badge' }, t('thinkingBadge', { n: formatNum(item.reasoningChars) })))
-        if (item.usage) badges.push(h('span', { key: 'u', className: 'fw-badge' }, '↑' + formatNum(item.usage.input) + ' ↓' + formatNum(item.usage.output)))
+        if (item.reasoningChars) badges.push(h('span', { key: 'th', className: 'fw-badge' }, t('thinkingBadge', { n: formatCompact(item.reasoningChars) })))
+        if (item.usage) badges.push(h('span', { key: 'u', className: 'fw-badge' }, usageCompact(item.usage)))
         if (item.interrupted) badges.push(h('span', { key: 'i', className: 'fw-badge err' }, t('interruptedBadge')))
       }
       return h('div', {
@@ -1445,7 +1459,7 @@ window.__ModuleLoader__.load({
     module.exports = {
       name: CLIENT_NAME,
       inject: ['slots', 'locale'],
-      __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgeGeometry, arrowFor, edgeColor, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, laneXFor, CHART, formatDuration, formatClock },
+      __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgeGeometry, arrowFor, edgeColor, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, formatCompact, usageCompact, laneXFor, CHART, formatDuration, formatClock },
       __boot(container, opts = {}) {
         ensureStyles()
         const t = opts.t || ((key, vars) => {
