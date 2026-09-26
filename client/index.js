@@ -665,6 +665,39 @@ function edgePath(e, style = EDGE_STYLE) {
   return `M ${e.x1} ${e.y1} Q ${cx} ${cy} ${e.x2} ${e.y2}`
 }
 
+/** 边的颜色（描边与箭头同色）：带 hue 用工具色，其余按语义取色。 */
+function edgeColor(e) {
+  if (e.hue !== undefined) return `hsl(${e.hue},62%,46%)`
+  switch (e.kind) {
+    case 'spine': return 'rgba(128,128,128,.7)'
+    case 'retry': return 'hsl(20,85%,50%)'
+    case 'attempt': return 'var(--dsw-alias-state-error-primary)'
+    case 'subagent': return 'hsl(265,60%,52%)'
+    default: return 'var(--dsw-alias-label-tertiary)'
+  }
+}
+
+/**
+ * 箭头三角：底边严格垂直于「起终点弦线方向」，顶点落在终点（节点边框）上，
+ * 与曲线末端的切线方向无关——保证箭头始终正对连线、不随弯歪斜。
+ */
+function arrowFor(e) {
+  const dx = e.x2 - e.x1
+  const dy = e.y2 - e.y1
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len
+  const uy = dy / len
+  const px = -uy
+  const py = ux
+  const baseX = e.x2 - ux * 9
+  const baseY = e.y2 - uy * 9
+  const half = 3.6
+  return {
+    d: `M ${e.x2} ${e.y2} L ${baseX + px * half} ${baseY + py * half} L ${baseX - px * half} ${baseY - py * half} z`,
+    color: edgeColor(e),
+  }
+}
+
 const formatNum = (n) => Number.isFinite(n) ? n.toLocaleString('en-US') : '-'
 
 function formatDuration(ms) {
@@ -1048,23 +1081,20 @@ function ChartView({ items, openGroups, t, onToggleGroup, onDetail, showGhost, b
       lanes.map((lane) => h('span', { key: lane.x, className: 'fw-lanebar-chip', style: { left: lane.x } }, lane.label))),
     h('div', { className: 'fw-chart', style: { width, height: totalH, minWidth: '100%' } },
       h('svg', { className: 'fw-chart-edges', width, height: totalH },
-        h('defs', null,
-          // context-stroke：箭头头自动跟随各边的 stroke；refX=7 让线端点落在
-          // 三角形正中心（箭头后半盖住线头，前尖微探进节点边框），随曲线切线倾斜
-          h('marker', { id: 'fw-arrow', viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' },
-            h('path', { d: 'M0,0 L10,5 L0,10 z', fill: 'context-stroke' }))),
         // 泳道引导线
         lanes.map((lane) => h('line', { key: 'lane' + lane.x, x1: lane.x, y1: CHART.padTop - 12, x2: lane.x, y2: height, className: 'fw-lane' })),
-        edges.map((e, i) => h('path', {
-          key: i, d: edgePath(e), className: 'fw-edge ' + e.kind,
-          style: e.hue !== undefined ? { stroke: `hsl(${e.hue},62%,46%)` } : undefined,
-          markerEnd: 'url(#fw-arrow)',
-        })),
-        ghostEdge && h('path', { d: edgePath(ghostEdge), className: 'fw-edge spine', strokeDasharray: '4 4', markerEnd: 'url(#fw-arrow)' })),
+        edges.map((e, i) => {
+          const arrow = arrowFor(e)
+          return [
+            h('path', { key: i + 'e', d: edgePath(e), className: 'fw-edge ' + e.kind, style: { stroke: edgeColor(e) } }),
+            h('path', { key: i + 'a', d: arrow.d, style: { fill: arrow.color } }),
+          ]
+        }),
+        ghostEdge && h('path', { d: edgePath(ghostEdge), className: 'fw-edge spine', strokeDasharray: '4 4' })),
       [...pos.values()].map((p) => h(ChartNode, { key: p.item.id, p, open: p.item.group === true && openGroups.has(p.item.id), turnDurations, t, onToggleGroup, onDetail })),
       showGhost && h('div', {
         className: 'fc-node fc-ghost',
-        style: { left: CHART.spineX - CHART.boxW / 2, top: height + 6, width: CHART.boxW, height: 34 },
+        style: { left: CHART.spineX - 85, top: height + 6, width: 170, height: 34 },
       }, t('ghostWorking')),
       h('div', { ref: bottomRef, style: { position: 'absolute', top: totalH - 1, height: '1px', width: '1px' } })))
 }
@@ -1339,7 +1369,7 @@ const CLIENT_NAME = '@weibaohui/dsh-flow'
 module.exports = {
   name: CLIENT_NAME,
   inject: ['slots', 'locale'],
-  __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, laneXFor, CHART, formatDuration, formatClock },
+  __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgePath, arrowFor, edgeColor, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, laneXFor, CHART, formatDuration, formatClock },
   __boot(container, opts = {}) {
     ensureStyles()
     const t = opts.t || ((key, vars) => {

@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const host = require('../src/index.js')
 const client = require('../client/index.js')
 const { mapEvent, blocksText, truncate, summarizeToolArguments, sessionBusy, projectFlow, decodeSessionLog, diskEventsOf } = host.__internals
-const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, CHART } = client.__internals
+const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, arrowFor, edgeColor, CHART } = client.__internals
 const tzh = (key, vars) => {
   let out = client.__internals.ZH[key] ?? key
   if (vars) for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(String(v))
@@ -400,6 +400,29 @@ test('estTextWidth: CJK 全宽、ASCII 半宽', () => {
   assert.equal(estTextWidth('中文'), 25)
   assert.ok(estTextWidth('ab') < estTextWidth('中文'))
   assert.equal(estTextWidth(''), 0)
+})
+
+test('arrowFor: base edge perpendicular to chord, apex on the endpoint', () => {
+  // 垂直向下：底边应水平（两端 y 相等），顶点在终点
+  const down = arrowFor({ x1: 100, y1: 0, x2: 100, y2: 60, kind: 'spine' })
+  const nums = down.d.match(/-?\d+\.?\d*/g).map(Number)
+  // 顶点 = 终点
+  assert.equal(nums[0], 100)
+  assert.equal(nums[1], 60)
+  // 底边两端 y 相等且在顶点上方 9px
+  assert.equal(nums[3], nums[5])
+  assert.ok(Math.abs(nums[3] - 51) < 0.001)
+  // 底边两端 x 对称于 100
+  assert.ok(Math.abs((nums[2] + nums[4]) / 2 - 100) < 0.001)
+  // 斜向弦线：底边向量（base1→base2）与弦线向量点积为 0（严格垂直）
+  const diag = arrowFor({ x1: 0, y1: 0, x2: 30, y2: 40, kind: 'fork', hue: 200 })
+  const dn = diag.d.match(/-?\d+\.?\d*/g).map(Number)
+  const baseEdge = { x: dn[4] - dn[2], y: dn[5] - dn[3] }
+  const chord = { x: 30, y: 40 }
+  assert.ok(Math.abs(baseEdge.x * chord.x + baseEdge.y * chord.y) < 0.001)
+  // 颜色：带 hue 用工具色，spine 用灰
+  assert.match(diag.color, /hsl\(200,62%,46%\)/)
+  assert.match(down.color, /128/)
 })
 
 test('nodeWidth/memberWidth adapt to content and clamp to lane-safe bounds', () => {
