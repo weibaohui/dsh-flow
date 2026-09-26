@@ -659,13 +659,23 @@ window.__ModuleLoader__.load({
      */
     function edgeGeometry(e) {
       const { x1, y1, x2, y2 } = e
-      // 旁路：浅 S 曲线水平进入旁路框左缘
+      // 旁路：水平引出 → 圆角拐竖 → 圆角拐平 → 水平进入旁路框左缘（dy 很小则直连）
       if (!['spine', 'fork', 'join', 'fanfork', 'fanjoin'].includes(e.kind)) {
-        const mx = Math.max(40, Math.abs(x2 - x1) * 0.5)
-        return {
-          d: `M ${x1} ${y1} C ${x1 + mx} ${y1}, ${x2 - mx} ${y2}, ${x2} ${y2}`,
-          arrowDir: { x: Math.sign(x2 - x1) || 1, y: 0 },
-        }
+        const sx = Math.sign(x2 - x1) || 1
+        const sy = Math.sign(y2 - y1) || 1
+        const dy = Math.abs(y2 - y1)
+        if (dy <= 10) return { d: `M ${x1} ${y1} L ${x2} ${y2}`, arrowDir: { x: sx, y: 0 } }
+        const r = Math.min(8, dy / 2)
+        const ax = x2 - sx * 10
+        const d = [
+          `M ${x1} ${y1}`,
+          `L ${ax} ${y1}`,
+          `Q ${ax} ${y1} ${ax} ${y1 + sy * r}`,
+          `L ${ax} ${y2 - sy * r}`,
+          `Q ${ax} ${y2} ${ax + sx * r} ${y2}`,
+          `L ${x2} ${y2}`,
+        ].join(' ')
+        return { d, arrowDir: { x: sx, y: 0 } }
       }
       const sx = Math.sign(x2 - x1) || 1
       const sy = Math.sign(y2 - y1) || 1
