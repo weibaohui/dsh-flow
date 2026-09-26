@@ -7,13 +7,13 @@
 
 ## 效果演示
 
-![demo：实时流程图 · 展开折叠 · 双击详情 · 下钻子代理](docs/demo.gif)
+![demo：实时流程图 · 展开折叠 · 双击详情 · 下钻子代理](https://raw.githubusercontent.com/weibaohui/dsh-flow/main/docs/demo.gif)
 
 | | |
 |---|---|
-| ![四泳道流程图：上下文 / 用户 / 助手 / 工具](docs/overview.png) | ![子代理扇形：并行派发，发散再收敛](docs/fan.png) |
+| ![四泳道流程图：上下文 / 用户 / 助手 / 工具](https://raw.githubusercontent.com/weibaohui/dsh-flow/main/docs/overview.png) | ![子代理扇形：并行派发，发散再收敛](https://raw.githubusercontent.com/weibaohui/dsh-flow/main/docs/fan.png) |
 | *四泳道 + 工具铁路侧线，执行过程一眼可追* | *并行子代理横向一排，双击 › 下钻子流程* |
-| ![双击子代理下钻到它自己的完整流程图](docs/drill.png) | ![列表视图：紧凑扫读](docs/list.png) |
+| ![双击子代理下钻到它自己的完整流程图](https://raw.githubusercontent.com/weibaohui/dsh-flow/main/docs/drill.png) | ![列表视图：紧凑扫读](https://raw.githubusercontent.com/weibaohui/dsh-flow/main/docs/list.png) |
 | *下钻子代理：面包屑返回主流程，历史子会话磁盘兜底* | *列表视图：单行节点紧凑扫读* |
 
 ## 核心功能
