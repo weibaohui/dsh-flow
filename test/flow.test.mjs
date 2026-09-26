@@ -430,16 +430,16 @@ test('arrowFor: base edge perpendicular to arrowDir, apex on the endpoint', () =
 })
 
 test('nodeWidth/memberWidth adapt to content and clamp to lane-safe bounds', () => {
-  // 短内容取最小宽，长内容封顶，泳道内不溢出
+  // 短内容取最小宽，长内容封顶；正文有保底空间，不会被徽标挤溢出
   assert.equal(nodeWidth({ kind: 'user', text: '好' }), 140)
-  assert.equal(nodeWidth({ kind: 'user', text: '很长'.repeat(200) }), 210)
-  // 助手带思考+用量徽标时更宽
+  assert.equal(nodeWidth({ kind: 'user', text: '很长'.repeat(200) }), 310)
+  // 助手带思考+用量徽标：徽标逐项计入且正文保底 56px
   const plain = nodeWidth({ kind: 'assistant', text: '好的' })
   const withBadges = nodeWidth({ kind: 'assistant', text: '好的', reasoningChars: 800, usage: { input: 1000, output: 200 } })
-  assert.ok(withBadges > plain)
-  // 组框计入「N 个工具调用」chip
+  assert.ok(withBadges - plain >= 150)
+  // 组框计入「N 个工具调用」chip 与 tally
   const groupW = nodeWidth({ group: true, members: [toolNode(1, 'bash'), toolNode(2, 'bash')] })
-  assert.ok(groupW >= 140 && groupW <= 210)
+  assert.ok(groupW >= 150 && groupW <= 250)
   // 成员框：长 prompt 截到 250，带耗时/子代理徽标加宽
   const short = memberWidth({ name: 'read', summary: 'a.ts' })
   const long = memberWidth({ name: 'spawn_teammate', summary: 'prompt: ' + 'x'.repeat(300), durationMs: 2000, childId: 'c1' })

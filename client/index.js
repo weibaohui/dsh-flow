@@ -407,16 +407,41 @@ const tWidth = (key, vars) => {
   return out
 }
 
-/** 主链方框宽度：内容（行文本 + chip + 徽标）+ 固定装饰，140–210 夹紧。 */
+/** 主链方框宽度：chip 与徽标按实际渲染件估宽先占位，正文分配剩余空间（保底
+ *  56px 保证至少几个字），上限随固定占用浮动——徽标再多也不会把正文挤溢出。 */
 function nodeWidth(item) {
   const isGroup = item.group === true
-  const line = isGroup ? toolGroupLine(item.members) : nodeLine(item, tWidth)
-  let w = estTextWidth(line, 12.5) + 48 // 圆点 + chip 底 + padding
-  if (isGroup) w += 78 // 「N 个工具调用」chip + caret
-  else if (item.kind === 'assistant') w += (item.reasoningChars ? 92 : 0) + (item.usage ? 96 : 0) + (item.interrupted ? 58 : 0)
-  else if (item.kind === 'todo') w += 26
-  else if (item.kind === 'user' || item.kind === 'context') w += 14
-  return Math.round(Math.min(Math.max(140, w), 210))
+  const base = 44 // padding 20 + 圆点 10 + 两处 gap
+  let fixed = 0
+  let line = ''
+  if (isGroup) {
+    fixed += estTextWidth(tWidth('toolGroup', { n: item.members.length }), 10.5) + 20 // chip
+    fixed += 14                                                                       // caret
+    line = toolGroupLine(item.members)
+    const failed = item.members.filter((m) => m.status === 'error').length
+    const running = item.members.filter((m) => m.status === 'running').length
+    const totalMs = item.members.reduce((s, m) => s + (m.durationMs || 0), 0)
+    if (failed > 0) fixed += 48
+    if (running > 0) fixed += 78
+    if (running === 0 && totalMs > 0) fixed += estTextWidth(formatDuration(totalMs), 11) + 22
+  } else {
+    const chipText = item.kind === 'user' ? tWidth('kindUser')
+      : item.kind === 'context' ? tWidth('kindContext')
+      : item.kind === 'assistant' ? tWidth('kindAssistant')
+      : item.kind === 'todo' ? tWidth('kindTodo') : ''
+    if (chipText) fixed += estTextWidth(chipText, 10.5) + 20
+    if (item.kind === 'assistant') {
+      if (item.reasoningChars) fixed += estTextWidth(tWidth('thinkingBadge', { n: formatNum(item.reasoningChars) }), 11) + 22
+      if (item.usage) fixed += estTextWidth('↑' + formatNum(item.usage.input) + ' ↓' + formatNum(item.usage.output), 11) + 22
+      if (item.interrupted) fixed += 76
+    }
+    if (item.kind === 'todo') fixed += 30
+    if (item.kind === 'context' && (item.sourcePlugin || item.sourceKind)) fixed += estTextWidth(item.sourcePlugin || item.sourceKind, 11) + 22
+    line = nodeLine(item, tWidth)
+  }
+  const cap = isGroup ? 250 : Math.max(310, base + fixed + 60)
+  const lineW = Math.min(estTextWidth(line, 12) + 10, Math.max(56, cap - base - fixed))
+  return Math.round(Math.min(Math.max(140, base + fixed + lineW), cap))
 }
 
 /** 成员框宽度：子代理标签或「名字 · 摘要」+ 圆点 + 耗时徽标，150–250 夹紧。 */
@@ -526,7 +551,9 @@ function layoutFlow(items, openGroups) {
       continue
     }
     const shape = kind === 'turn' ? 'oval' : kind === 'approval' ? 'diamond' : 'box'
-    const w = shape === 'oval' ? (item.phase === 'end' ? CHART.ovalEndW : CHART.ovalW) : shape === 'diamond' ? CHART.diamondW : nodeWidth(item)
+    let w = shape === 'oval' ? (item.phase === 'end' ? CHART.ovalEndW : CHART.ovalW) : shape === 'diamond' ? CHART.diamondW : nodeWidth(item)
+    // 左泳道（上下文）按「泳道中心到画布左缘的距离」夹紧，避免宽框伸出画布被裁
+    if (shape === 'box') w = Math.min(w, 2 * (laneXFor(kind) - 6))
     const hgt = shape === 'oval' ? CHART.ovalH : shape === 'diamond' ? CHART.diamondH : CHART.boxH
     // 回合与决策在主泳道；用户/上下文各走自己的泳道
     const laneX = shape === 'box' ? laneXFor(kind) : CHART.spineX
@@ -876,7 +903,7 @@ const STYLE = `<style>
 .fc-node{position:absolute;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none}
 .fc-box{min-width:0;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-left-width:3px;border-radius:9px;background:var(--dsw-alias-bg-layer-1);justify-content:flex-start;gap:7px}
 .fc-box:hover{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l3)}
-.fc-box .fw-line{font-size:12px}
+.fc-box .fw-line{font-size:12px;min-width:44px}
 .fc-oval{border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:12px;gap:6px;padding:0 14px}
 .fc-diamond{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);background:var(--dsw-alias-bg-layer-2);color:hsl(38,92%,40%);font-size:11.5px;font-weight:600;flex-direction:column;line-height:1.1;text-align:center;padding:0 18%;filter:drop-shadow(0 0 1px var(--dsw-alias-border-l3))}
 .fc-member{min-width:0;padding:0 8px;border:1px solid hsl(265,60%,52%);border-radius:7px;background:var(--dsw-alias-bg-layer-1);justify-content:flex-start;gap:6px;font-size:11.5px}
