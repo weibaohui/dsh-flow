@@ -59,6 +59,10 @@ dsh plugin --profile web add @weibaohui/dsh-flow -w
 
 宿主侧把会话事件映射成紧凑节点（`mapEvent`，纯函数），三条输出路径共享同一份映射——全量 `GET /dsh-flow/api/flow`、SSE 回补段、`session/event` 直播——客户端以 seq 去重即可，不关心节点来自哪条路径。映射默认把正文截断到 400 字（附全文长度），全文经 `GET /dsh-flow/api/event?seq=` 按需补全。
 
+## 联系我 :飞书群
+
+![飞书群](https://foruda.gitee.com/images/1774880015525784725/4fd67005_77493.png)
+
 ## 版本兼容性
 
 本插件与 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`@deepseek-ai/dsh`）的版本对应关系：
