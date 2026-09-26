@@ -641,28 +641,47 @@ function layoutFlow(items, openGroups) {
 }
 
 /**
- * 边的 SVG 路径。EDGE_STYLE 一键切换：
- *   'quad'   —— 单弯普通曲线（Q 二次曲线，圆角拐弯：主链先竖后横，侧线先横后竖）
- *   'line'   —— 直线直连
- *   'bezier' —— 三次贝塞尔（双弯 S 曲线）
+ * 边的几何：路径 + 箭头方向。
+ *
+ * 进入节点顶边的边（spine/join/fanjoin：竖直下行进入；fork/fanfork：水平引出后
+ * 拐下进入）一律以「圆角正交肘形」收尾——最后一段竖直向下，箭头竖直、底边水平
+ * 贴住节点顶边；旁路事件（挂右侧框）水平进入左缘，箭头水平。
  */
-const EDGE_STYLE = 'quad'
-function edgePath(e, style = EDGE_STYLE) {
-  if (e.x1 === e.x2) return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
-  if (style === 'line') return `M ${e.x1} ${e.y1} L ${e.x2} ${e.y2}`
-  if (style === 'bezier') {
-    if (e.kind === 'spine' || e.kind === 'fanfork' || e.kind === 'fanjoin') {
-      const d = Math.max(24, Math.min(90, Math.abs(e.y2 - e.y1) / 2))
-      return `M ${e.x1} ${e.y1} C ${e.x1} ${e.y1 + d}, ${e.x2} ${e.y2 - d}, ${e.x2} ${e.y2}`
+function edgeGeometry(e) {
+  const { x1, y1, x2, y2 } = e
+  // 旁路：浅 S 曲线水平进入旁路框左缘
+  if (!['spine', 'fork', 'join', 'fanfork', 'fanjoin'].includes(e.kind)) {
+    const mx = Math.max(40, Math.abs(x2 - x1) * 0.5)
+    return {
+      d: `M ${x1} ${y1} C ${x1 + mx} ${y1}, ${x2 - mx} ${y2}, ${x2} ${y2}`,
+      arrowDir: { x: Math.sign(x2 - x1) || 1, y: 0 },
     }
-    const mx = Math.max(40, Math.abs(e.x2 - e.x1) / 2)
-    return `M ${e.x1} ${e.y1} C ${e.x1 + mx} ${e.y1}, ${e.x2 - mx} ${e.y2}, ${e.x2} ${e.y2}`
   }
-  // quad：单弯普通曲线。主链/扇形先竖直下行再圆弧拐向目标；侧线先横出再拐下。
-  const verticalFirst = e.kind === 'spine' || e.kind === 'fanfork' || e.kind === 'fanjoin'
-  const cx = verticalFirst ? e.x1 : e.x2
-  const cy = verticalFirst ? e.y2 : e.y1
-  return `M ${e.x1} ${e.y1} Q ${cx} ${cy} ${e.x2} ${e.y2}`
+  const sx = Math.sign(x2 - x1) || 1
+  const sy = Math.sign(y2 - y1) || 1
+  if (x1 === x2) {
+    return { d: `M ${x1} ${y1} L ${x2} ${y2}`, arrowDir: { x: 0, y: sy } }
+  }
+  if (e.kind === 'fork' || e.kind === 'fanfork') {
+    // 水平引出 → 圆角拐下 → 竖直进入成员顶边
+    const r = Math.max(4, Math.min(10, Math.abs(y2 - y1) / 2, Math.abs(x2 - x1)))
+    return {
+      d: `M ${x1} ${y1} L ${x2 - sx * r} ${y1} Q ${x2} ${y1} ${x2} ${y1 + sy * r} L ${x2} ${y2}`,
+      arrowDir: { x: 0, y: sy },
+    }
+  }
+  // spine / join / fanjoin：竖直下行 → 圆角拐横 → 圆角拐下 → 竖直进入顶边
+  const ym = (y1 + y2) / 2
+  const r = Math.max(6, Math.min(12, Math.abs(x2 - x1) / 2, Math.abs(ym - y1), Math.abs(y2 - ym)))
+  const d = [
+    `M ${x1} ${y1}`,
+    `L ${x1} ${ym - sy * r}`,
+    `Q ${x1} ${ym} ${x1 + sx * r} ${ym}`,
+    `L ${x2 - sx * r} ${ym}`,
+    `Q ${x2} ${ym} ${x2} ${ym + sy * r}`,
+    `L ${x2} ${y2}`,
+  ].join(' ')
+  return { d, arrowDir: { x: 0, y: sy } }
 }
 
 /** 边的颜色（描边与箭头同色）：带 hue 用工具色，其余按语义取色。 */
@@ -678,15 +697,14 @@ function edgeColor(e) {
 }
 
 /**
- * 箭头三角：底边严格垂直于「起终点弦线方向」，顶点落在终点（节点边框）上，
- * 与曲线末端的切线方向无关——保证箭头始终正对连线、不随弯歪斜。
+ * 箭头三角：底边严格垂直于 arrowDir（进入方向），顶点落在终点（节点边框）上。
+ * 竖直进入 → 底边水平贴住节点顶边；水平进入 → 底边竖直贴住旁路框左缘。
  */
 function arrowFor(e) {
-  const dx = e.x2 - e.x1
-  const dy = e.y2 - e.y1
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
+  const dir = e.arrowDir || { x: 0, y: 1 }
+  const len = Math.hypot(dir.x, dir.y) || 1
+  const ux = dir.x / len
+  const uy = dir.y / len
   const px = -uy
   const py = ux
   const baseX = e.x2 - ux * 9
@@ -1084,13 +1102,14 @@ function ChartView({ items, openGroups, t, onToggleGroup, onDetail, showGhost, b
         // 泳道引导线
         lanes.map((lane) => h('line', { key: 'lane' + lane.x, x1: lane.x, y1: CHART.padTop - 12, x2: lane.x, y2: height, className: 'fw-lane' })),
         edges.map((e, i) => {
+          const geo = edgeGeometry(e)
           const arrow = arrowFor(e)
           return [
-            h('path', { key: i + 'e', d: edgePath(e), className: 'fw-edge ' + e.kind, style: { stroke: edgeColor(e) } }),
+            h('path', { key: i + 'e', d: geo.d, className: 'fw-edge ' + e.kind, style: { stroke: edgeColor(e) } }),
             h('path', { key: i + 'a', d: arrow.d, style: { fill: arrow.color } }),
           ]
         }),
-        ghostEdge && h('path', { d: edgePath(ghostEdge), className: 'fw-edge spine', strokeDasharray: '4 4' })),
+        ghostEdge && h('path', { d: edgeGeometry(ghostEdge).d, className: 'fw-edge spine', strokeDasharray: '4 4' })),
       [...pos.values()].map((p) => h(ChartNode, { key: p.item.id, p, open: p.item.group === true && openGroups.has(p.item.id), turnDurations, t, onToggleGroup, onDetail })),
       showGhost && h('div', {
         className: 'fc-node fc-ghost',
@@ -1369,7 +1388,7 @@ const CLIENT_NAME = '@weibaohui/dsh-flow'
 module.exports = {
   name: CLIENT_NAME,
   inject: ['slots', 'locale'],
-  __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgePath, arrowFor, edgeColor, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, laneXFor, CHART, formatDuration, formatClock },
+  __internals: { NS, ZH, EN, applyEventToNodes, reduceEvents, nodeCategory, nodeLine, groupNodes, toolGroupLine, layoutFlow, edgeGeometry, arrowFor, edgeColor, isDelegationTool, isDelegationGroup, attachChildren, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, laneXFor, CHART, formatDuration, formatClock },
   __boot(container, opts = {}) {
     ensureStyles()
     const t = opts.t || ((key, vars) => {

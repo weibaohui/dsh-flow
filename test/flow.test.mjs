@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const host = require('../src/index.js')
 const client = require('../client/index.js')
 const { mapEvent, blocksText, truncate, summarizeToolArguments, sessionBusy, projectFlow, decodeSessionLog, diskEventsOf } = host.__internals
-const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgePath, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, arrowFor, edgeColor, CHART } = client.__internals
+const { applyEventToNodes, reduceEvents, nodeCategory, formatDuration, groupNodes, nodeLine, toolGroupLine, layoutFlow, edgeGeometry, isDelegationTool, isDelegationGroup, attachChildren, laneXFor, toolHue, toolColor, groupColor, estTextWidth, nodeWidth, memberWidth, arrowFor, edgeColor, CHART } = client.__internals
 const tzh = (key, vars) => {
   let out = client.__internals.ZH[key] ?? key
   if (vars) for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(String(v))
@@ -331,14 +331,17 @@ test('layoutFlow lays spine nodes top-down with shapes, lanes and chain edges', 
   // y 严格递增
   const ys = ['a', 'b', 'x', 'c', 'd', 'e'].map((id) => pos.get(id).y)
   for (let i = 1; i < ys.length; i++) assert.ok(ys[i] > ys[i - 1])
-  // 主链 5 条边；跨泳道：贝塞尔模式是 C 曲线，直线模式是直连
+  // 主链 5 条边；跨泳道：圆角正交肘形（竖直进入目标顶边），同泳道：竖直直线
   const spineEdges = edges.filter((e) => e.kind === 'spine')
   assert.equal(spineEdges.length, 5)
   const cross = spineEdges.find((e) => e.x1 !== e.x2)
-  assert.match(edgePath(cross, 'bezier'), /^M .+ C /)
-  assert.match(edgePath(cross, 'line'), /^M .+ L /)
+  const crossGeo = edgeGeometry(cross)
+  assert.match(crossGeo.d, /Q /)
+  assert.match(crossGeo.d, new RegExp(`L ${cross.x2} ${cross.y2}$`))
+  assert.deepEqual(crossGeo.arrowDir, { x: 0, y: 1 })
   const straight = spineEdges.find((e) => e.x1 === e.x2)
-  assert.match(edgePath(straight), /^M .+ L /)
+  assert.match(edgeGeometry(straight).d, /^M .+ L .+$/)
+  assert.deepEqual(edgeGeometry(straight).arrowDir, { x: 0, y: 1 })
 })
 
 test('layoutFlow fans parallel subagent delegations out in one row and converges', () => {
@@ -402,9 +405,9 @@ test('estTextWidth: CJK 全宽、ASCII 半宽', () => {
   assert.equal(estTextWidth(''), 0)
 })
 
-test('arrowFor: base edge perpendicular to chord, apex on the endpoint', () => {
-  // 垂直向下：底边应水平（两端 y 相等），顶点在终点
-  const down = arrowFor({ x1: 100, y1: 0, x2: 100, y2: 60, kind: 'spine' })
+test('arrowFor: base edge perpendicular to arrowDir, apex on the endpoint', () => {
+  // 竖直向下进入：底边应水平（两端 y 相等），顶点在终点
+  const down = arrowFor({ x2: 100, y2: 60, arrowDir: { x: 0, y: 1 }, kind: 'spine' })
   const nums = down.d.match(/-?\d+\.?\d*/g).map(Number)
   // 顶点 = 终点
   assert.equal(nums[0], 100)
@@ -414,15 +417,16 @@ test('arrowFor: base edge perpendicular to chord, apex on the endpoint', () => {
   assert.ok(Math.abs(nums[3] - 51) < 0.001)
   // 底边两端 x 对称于 100
   assert.ok(Math.abs((nums[2] + nums[4]) / 2 - 100) < 0.001)
-  // 斜向弦线：底边向量（base1→base2）与弦线向量点积为 0（严格垂直）
-  const diag = arrowFor({ x1: 0, y1: 0, x2: 30, y2: 40, kind: 'fork', hue: 200 })
-  const dn = diag.d.match(/-?\d+\.?\d*/g).map(Number)
-  const baseEdge = { x: dn[4] - dn[2], y: dn[5] - dn[3] }
-  const chord = { x: 30, y: 40 }
-  assert.ok(Math.abs(baseEdge.x * chord.x + baseEdge.y * chord.y) < 0.001)
-  // 颜色：带 hue 用工具色，spine 用灰
-  assert.match(diag.color, /hsl\(200,62%,46%\)/)
+  // 水平向右进入：底边竖直，顶点在终点
+  const right = arrowFor({ x2: 200, y2: 50, arrowDir: { x: 1, y: 0 }, kind: 'side' })
+  const rn = right.d.match(/-?\d+\.?\d*/g).map(Number)
+  assert.equal(rn[0], 200)
+  assert.equal(rn[1], 50)
+  assert.equal(rn[2], rn[4])
+  assert.ok(Math.abs(rn[2] - 191) < 0.001)
+  // 颜色：spine 用灰，side 用三色变量
   assert.match(down.color, /128/)
+  assert.match(right.color, /label-tertiary/)
 })
 
 test('nodeWidth/memberWidth adapt to content and clamp to lane-safe bounds', () => {
