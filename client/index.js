@@ -663,7 +663,17 @@ function edgeGeometry(e) {
     return { d: `M ${x1} ${y1} L ${x2} ${y2}`, arrowDir: { x: 0, y: sy } }
   }
   if (e.kind === 'fork' || e.kind === 'fanfork') {
-    // 水平引出 → 圆角拐下 → 竖直进入成员顶边
+    // fanfork：先沿主干下行一段，再水平展开、圆角拐下进入各子代理顶边
+    if (e.kind === 'fanfork') {
+      const trunk = Math.max(10, Math.min(26, Math.abs(y2 - y1) - 12))
+      const r = Math.max(4, Math.min(10, Math.abs(y2 - y1) - trunk - 4, Math.abs(x2 - x1)))
+      const ty = y1 + sy * trunk
+      return {
+        d: `M ${x1} ${y1} L ${x1} ${ty} L ${x2 - sx * r} ${ty} Q ${x2} ${ty} ${x2} ${ty + sy * r} L ${x2} ${y2}`,
+        arrowDir: { x: 0, y: sy },
+      }
+    }
+    // 普通工具组：水平引出 → 圆角拐下 → 竖直进入成员顶边
     const r = Math.max(4, Math.min(10, Math.abs(y2 - y1) / 2, Math.abs(x2 - x1)))
     return {
       d: `M ${x1} ${y1} L ${x2 - sx * r} ${y1} Q ${x2} ${y1} ${x2} ${y1 + sy * r} L ${x2} ${y2}`,
